@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail AI Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .category-NEEDS_RESPONSE { background-color: #fee2e2; color: #991b1b; border-color: #f87171; } /* Red */
+        .category-SHORTLISTED { background-color: #dcfce7; color: #166534; border-color: #4ade80; } /* Green */
+        .category-FINANCIAL { background-color: #fef9c3; color: #854d0e; border-color: #facc15; } /* Yellow */
+        .category-HAS_INFO { background-color: #e0f2fe; color: #075985; border-color: #38bdf8; } /* Light Blue */
+        .category-REJECTION { background-color: #f3f4f6; color: #374151; border-color: #9ca3af; } /* Gray */
+        .category-REVIEW { background-color: #ffedd5; color: #9a3412; border-color: #fb923c; } /* Orange */
+        .category-SKIP_ACK { background-color: #f8fafc; color: #64748b; border-color: #cbd5e1; } /* Slate */
+        .category-SKIP_PLATFORM { background-color: #f8fafc; color: #64748b; border-color: #cbd5e1; } /* Slate */
+        .category-SKIP_PROMO { background-color: #f8fafc; color: #64748b; border-color: #cbd5e1; } /* Slate */
+
+        .score-bar {
+            height: 6px;
+            background-color: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .score-fill {
+            height: 100%;
+            background-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">Gmail AI Dashboard</h1>
+                <p class="text-gray-500 text-sm mt-1">Smart Inbox for Job Seekers</p>
+            </div>
+            <div id="status-card" class="bg-white p-3 rounded shadow-sm text-sm border flex items-center space-x-4">
+                <div>
+                    <span class="text-gray-500">Jev Model:</span>
+                    <span id="jev-model" class="font-medium ml-1">Loading...</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">Local Insight AI:</span>
+                    <span id="ollama-status" class="font-medium ml-1">Loading...</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex space-x-6 mb-6">
+            <!-- Filter Sidebar -->
+            <div class="w-1/4">
+                <div class="bg-white rounded shadow-sm p-4 sticky top-6">
+                    <h2 class="font-semibold text-lg mb-4">Filters</h2>
+                    <ul id="filter-list" class="space-y-2">
+                        <li><button onclick="loadEmails('ALL')" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 font-medium">All Emails (<span id="count-ALL">0</span>)</button></li>
+                        
+                        <li class="pt-2"><div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Priority</div></li>
+                        <li><button onclick="loadEmails('NEEDS_RESPONSE')" class="w-full text-left px-3 py-2 rounded hover:bg-red-50 text-red-700 flex justify-between">Needs Response <span id="count-NEEDS_RESPONSE">0</span></button></li>
+                        <li><button onclick="loadEmails('SHORTLISTED')" class="w-full text-left px-3 py-2 rounded hover:bg-green-50 text-green-700 flex justify-between">Shortlisted <span id="count-SHORTLISTED">0</span></button></li>
+                        <li><button onclick="loadEmails('FINANCIAL')" class="w-full text-left px-3 py-2 rounded hover:bg-yellow-50 text-yellow-700 flex justify-between">Financial <span id="count-FINANCIAL">0</span></button></li>
+                        <li><button onclick="loadEmails('HAS_INFO')" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50 text-blue-700 flex justify-between">Has Info <span id="count-HAS_INFO">0</span></button></li>
+                        
+                        <li class="pt-2"><div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Other</div></li>
+                        <li><button onclick="loadEmails('REVIEW')" class="w-full text-left px-3 py-2 rounded hover:bg-orange-50 text-orange-700 flex justify-between">Review <span id="count-REVIEW">0</span></button></li>
+                        <li><button onclick="loadEmails('REJECTION')" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-gray-700 flex justify-between">Rejection <span id="count-REJECTION">0</span></button></li>
+                        
+                        <li class="pt-2"><div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Skipped (Noise)</div></li>
+                        <li><button onclick="loadEmails('SKIP_ACK')" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-gray-500 flex justify-between">Auto-Ack <span id="count-SKIP_ACK">0</span></button></li>
+                        <li><button onclick="loadEmails('SKIP_PLATFORM')" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-gray-500 flex justify-between">Platform Notif <span id="count-SKIP_PLATFORM">0</span></button></li>
+                        <li><button onclick="loadEmails('SKIP_PROMO')" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-gray-500 flex justify-between">Promo/Spam <span id="count-SKIP_PROMO">0</span></button></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Email List -->
+            <div class="w-3/4">
+                <div id="email-container" class="space-y-4">
+                    <div class="text-center py-12 text-gray-500">Loading emails...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFilter = 'ALL';
+
+        async function loadStats() {
+            const res = await fetch('/api/stats');
+            const data = await res.json();
+            
+            document.getElementById('jev-model').textContent = `${data.provider} (${data.model})`;
+            
+            const ollamaStatus = document.getElementById('ollama-status');
+            if (data.ollama_running) {
+                ollamaStatus.textContent = `Online (${data.summary_model})`;
+                ollamaStatus.className = "font-medium ml-1 text-green-600";
+            } else {
+                ollamaStatus.textContent = "Offline";
+                ollamaStatus.className = "font-medium ml-1 text-red-500";
+            }
+
+            const counts = data.stats || {};
+            let total = 0;
+            
+            const categories = ['NEEDS_RESPONSE', 'SHORTLISTED', 'FINANCIAL', 'HAS_INFO', 'REVIEW', 'REJECTION', 'SKIP_ACK', 'SKIP_PLATFORM', 'SKIP_PROMO'];
+            
+            categories.forEach(cat => {
+                const count = counts[cat] || 0;
+                total += count;
+                const el = document.getElementById(`count-${cat}`);
+                if (el) el.textContent = count;
+            });
+            
+            document.getElementById('count-ALL').textContent = total;
+        }
+
+        async function loadEmails(category = 'ALL') {
+            currentFilter = category;
+            const container = document.getElementById('email-container');
+            container.innerHTML = '<div class="text-center py-12 text-gray-500">Loading...</div>';
+
+            const res = await fetch(`/api/emails?category=${category}&limit=200`);
+            const emails = await res.json();
+
+            if (emails.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-gray-500 bg-white rounded shadow-sm">No emails found in this category.</div>`;
+                return;
+            }
+
+            let html = '';
+            emails.forEach(email => {
+                const date = new Date(email.received_at).toLocaleString();
+                const prob = email.probabilities || {};
+                
+                let scoresHtml = '';
+                // Render top 3 scores
+                const sortedScores = Object.entries(prob)
+                    .filter(([k, v]) => typeof v === 'number')
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3);
+                
+                sortedScores.forEach(([key, val]) => {
+                    const cleanKey = key.replace('_probability', '');
+                    const pct = Math.round(val * 100);
+                    scoresHtml += `
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>${cleanKey}</span>
+                                <span>${pct}%</span>
+                            </div>
+                            <div class="score-bar"><div class="score-fill" style="width: ${pct}%"></div></div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                    <div class="bg-white rounded-lg shadow-sm border p-5 flex flex-col hover:shadow-md transition cursor-pointer" onclick="this.querySelector('.email-details').classList.toggle('hidden')">
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="flex-1">
+                                <div class="flex items-center space-x-3 mb-1">
+                                    <span class="px-2.5 py-1 text-xs font-semibold rounded-full border category-${email.category}">
+                                        ${email.category.replace('_', ' ')}
+                                    </span>
+                                    <span class="text-xs text-gray-400">${date}</span>
+                                </div>
+                                <h3 class="font-bold text-lg text-gray-800">${email.subject}</h3>
+                                <p class="text-sm text-gray-600 truncate">${email.sender}</p>
+                            </div>
+                        </div>
+                        
+                        ${email.insight ? `
+                        <div class="bg-indigo-50 border border-indigo-100 rounded p-3 mb-3 text-sm text-indigo-900 flex items-start mt-2">
+                            <span class="mr-2">✨</span>
+                            <span class="font-medium">${email.insight}</span>
+                        </div>
+                        ` : ''}
+                        
+                        <p class="text-gray-600 text-sm line-clamp-2 mt-1">${email.body_snippet}</p>
+
+                        <!-- Hidden Details Panel -->
+                        <div class="email-details hidden mt-4 pt-4 border-t grid grid-cols-3 gap-6">
+                            <div class="col-span-2">
+                                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Snippet</h4>
+                                <p class="text-sm text-gray-700 whitespace-pre-wrap">${email.body_snippet}</p>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">AI Scores</h4>
+                                ${scoresHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Initialize
+        loadStats();
+        loadEmails('ALL');
+        
+        // Refresh stats periodically
+        setInterval(loadStats, 10000);
+    </script>
+</body>
+</html>
